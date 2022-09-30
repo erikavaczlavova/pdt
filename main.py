@@ -6,6 +6,7 @@ import time
 import csv
 import math
 
+
 #conection to database
 conn = psycopg2.connect(
    database="postgres", user='postgres', password='postgres', host='localhost', port='5432'
@@ -23,10 +24,7 @@ def timer(start,block_s,block_e):
     minutes, seconds = divmod(block_time, 60)
     block_time = str(int(minutes))+ ":"+ str(math.ceil(int(seconds)))
     ret = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")+ "; "+whole+"; "+block_time
-
     return ret
-
-
 def authors():
     start_time = time.time()
     # creating temporary file
@@ -44,13 +42,12 @@ def authors():
     create_end = time.time()
     print("Creating table: "+ timer(start_time,start_time,create_end))
     print("Inserting 100 000 sized blocks")
-    #opennig tge Gzip data file line by line
+    #opennig the Gzip data file line by line
     with gzip.open("E:\School\ING\/1.Semeter\pdt database\/authors.jsonl.gz", "r") as f:
         counter = 0
         block_s = time.time()
         for line in f:
             data_line = json.loads(line)
-            input = []
             input = [data_line['id'],
                     data_line['name'].replace('\x00','').replace('\\','').replace(';',',').replace('\n','').replace('\r', ''),
                     data_line['username'].replace('\x00','').replace('\\','').replace(';',',').replace('\n','').replace('\r', ''),
@@ -113,8 +110,84 @@ def authors():
 
 def conversations():
     start_time = time.time()
-    with gzip.open("E:\School\ING\/1.Semeter\pdt database\/authors.jsonl.gz", "r") as f:
+    with gzip.open("E:\School\ING\/1.Semeter\pdt database\/conversations.jsonl.gz", "r") as f:
         counter = 0
+    start_time = time.time()
+
+    # creating temporary files
+    file1 = open("E:\School\ING\/1.Semeter\pdt database\/conversations.csv", "w", newline='', encoding='utf-8')
+    writer = csv.writer(file1, delimiter=";")
+    file2 = open("E:\School\ING\/1.Semeter\pdt database\/conversations_references.csv", "w", newline='', encoding='utf-8')
+    writer2 = csv.writer(file2, delimiter=";")
+
+    cursor.execute("""create table conversations (
+    id int8,
+    author_id int8,
+    content TEXT,
+    possibly_sensitive bool,
+    language varchar(3),
+    source text,
+    retweet_count int4,
+    reply_count int4,
+    like_count int4,
+    quote_count int4,
+    created_at TIMESTAMP);
+    CREATE table conversation_references (
+    id bigserial primary key,
+    conversation_id int8,
+    parent_id int8,
+    type varchar(20))""")
+    create_end = time.time()
+    #conn.commit()
+    print("Creating table Conversations, Refs + commit : " + timer(start_time, start_time, create_end))
+
+    with gzip.open("E:\School\ING\/1.Semeter\pdt database\/conversations.jsonl.gz", "r") as f:
+        counter = 0
+        block_s = time.time()
+        counter = 0
+        for line in f:
+            data_line = json.loads(line)
+            counter += 1
+            input = [data_line['id'],data_line['author_id'],
+                    data_line['text'].replace('\x00','').replace('\\','').replace(';',',').replace('\n','').replace('\r', ''),
+                    data_line['possibly_sensitive'],
+                    data_line['lang'].replace('\x00','').replace('\\','').replace(';',',').replace('\n','').replace('\r', ''),
+                    data_line['source'].replace('\x00','').replace('\\','').replace(';',',').replace('\n','').replace('\r', ''),
+                    data_line['public_metrics']['retweet_count'],data_line['public_metrics']['reply_count'],
+                    data_line['public_metrics']['like_count'],data_line['public_metrics']['quote_count'],
+                    data_line['created_at']]
+            writer.writerow(input)
+
+            if data_line.get('referenced_tweets'):
+                for ref in data_line['referenced_tweets']:
+                    input_ref_c = [data_line['id'],ref['id'],ref['type']]
+                    writer2.writerow(input_ref_c)
+
+            if counter == 100000:
+                flag = 1
+                # cleaning file
+                file1.close()
+                file2.close()
+
+                file1 = open("E:\School\ING\/1.Semeter\pdt database\/conversations.csv", "r", newline='', encoding='utf-8')
+                cursor.copy_from(file1, 'conversations', sep=';')
+
+                file2 = open("E:\School\ING\/1.Semeter\pdt database\/conversations_references.csv", "r", newline='',encoding='utf-8')
+                cursor.copy_from(file2,'conversation_references', sep=';', columns=('conversation_id','parent_id','type'))
 
 
-authors()
+                block_e = time.time()
+                print(timer(start_time, block_s, block_e))
+                counter = 0
+                file1.close()
+                file1 = open('E:\School\ING\/1.Semeter\pdt database\/conversations.csv', 'w', newline='', encoding='utf-8')
+                file2.close()
+                file2 = open('E:\School\ING\/1.Semeter\pdt database\/conversations_references.csv', 'w', newline='', encoding='utf-8')
+                writer = csv.writer(file1, delimiter=";")
+                writer2 =csv.writer(file2, delimiter = ";")
+                conn.commit()
+                block_s = time.time()
+
+
+
+conversations()
