@@ -119,6 +119,8 @@ def conversations():
     writer = csv.writer(file1, delimiter=";")
     file2 = open("E:\School\ING\/1.Semeter\pdt database\/conversations_references.csv", "w", newline='', encoding='utf-8')
     writer2 = csv.writer(file2, delimiter=";")
+    file3 = open("E:\School\ING\/1.Semeter\pdt database\/annotations.csv", "w", newline='',encoding='utf-8')
+    writer3 = csv.writer(file3, delimiter=";")
 
     cursor.execute("""create table conversations (
     id int8,
@@ -136,10 +138,16 @@ def conversations():
     id bigserial primary key,
     conversation_id int8,
     parent_id int8,
-    type varchar(20))""")
+    type varchar(20));
+    CREATE table annotations (
+    id bigserial primary key,
+    conversation_id int8,
+    value text,
+    type text,
+    probability NUMERIC(4,3))""")
     create_end = time.time()
     #conn.commit()
-    print("Creating table Conversations, Refs + commit : " + timer(start_time, start_time, create_end))
+    print("Creating table Conversations, Refs, Anotations + commit : " + timer(start_time, start_time, create_end))
 
     with gzip.open("E:\School\ING\/1.Semeter\pdt database\/conversations.jsonl.gz", "r") as f:
         counter = 0
@@ -163,11 +171,18 @@ def conversations():
                     input_ref_c = [data_line['id'],ref['id'],ref['type']]
                     writer2.writerow(input_ref_c)
 
+            if data_line.get('entities'):
+                if data_line['entities'].get('annotations'):
+                    for annot in data_line['entities']['annotations']:
+                        input_annot = [data_line['id'],annot['normalized_text'].replace('\x00','').replace('\\','').replace(';',',').replace('\n','').replace('\r', ''),annot['type'],annot['probability']]
+                        writer3.writerow(input_annot)
+
             if counter == 100000:
                 flag = 1
                 # cleaning file
                 file1.close()
                 file2.close()
+                file3.close()
 
                 file1 = open("E:\School\ING\/1.Semeter\pdt database\/conversations.csv", "r", newline='', encoding='utf-8')
                 cursor.copy_from(file1, 'conversations', sep=';')
@@ -175,6 +190,8 @@ def conversations():
                 file2 = open("E:\School\ING\/1.Semeter\pdt database\/conversations_references.csv", "r", newline='',encoding='utf-8')
                 cursor.copy_from(file2,'conversation_references', sep=';', columns=('conversation_id','parent_id','type'))
 
+                file3 = open("E:\School\ING\/1.Semeter\pdt database\/annotations.csv", "r", newline='',encoding='utf-8')
+                cursor.copy_from(file3, 'annotations', sep=';',columns=('conversation_id','value', 'type', 'probability'))
 
                 block_e = time.time()
                 print(timer(start_time, block_s, block_e))
@@ -183,8 +200,11 @@ def conversations():
                 file1 = open('E:\School\ING\/1.Semeter\pdt database\/conversations.csv', 'w', newline='', encoding='utf-8')
                 file2.close()
                 file2 = open('E:\School\ING\/1.Semeter\pdt database\/conversations_references.csv', 'w', newline='', encoding='utf-8')
+                file3.close()
+                file3 = open('E:\School\ING\/1.Semeter\pdt database\/annotations.csv', 'w', newline='',encoding='utf-8')
                 writer = csv.writer(file1, delimiter=";")
-                writer2 =csv.writer(file2, delimiter = ";")
+                writer2 = csv.writer(file2, delimiter=";")
+                writer3 = csv.writer(file3, delimiter=";")
                 conn.commit()
                 block_s = time.time()
 
