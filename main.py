@@ -123,6 +123,13 @@ def conversations():
     writer3 = csv.writer(file3, delimiter=";")
     file4 = open("E:\School\ING\/1.Semeter\pdt database\/links.csv", "w", newline='', encoding='utf-8')
     writer4 = csv.writer(file4, delimiter=";")
+    file5 = open("E:\School\ING\/1.Semeter\pdt database\/hashtags.csv", "w", newline='', encoding='utf-8')
+    writer5 = csv.writer(file5, delimiter=";")
+    file6 = open("E:\School\ING\/1.Semeter\pdt database\/context_domains.csv", "w", newline='', encoding='utf-8')
+    writer6 = csv.writer(file6, delimiter=";")
+    file7 = open("E:\School\ING\/1.Semeter\pdt database\/context_entities.csv", "w", newline='', encoding='utf-8')
+    writer7 = csv.writer(file7, delimiter=";")
+
 
     cursor.execute("""create table conversations (
     id int8,
@@ -152,11 +159,22 @@ def conversations():
     conversation_id int8,
     url varchar(2048),
     title text,
+    description text);
+    CREATE table hashtags (
+    id bigserial primary key,
+    tag text);
+    CREATE table context_domains (
+    id int8,
+    name VARCHAR(255),
+    description text);
+    CREATE table context_entities (
+    id int8,
+    name VARCHAR(255),
     description text)""")
 
     create_end = time.time()
     #conn.commit()
-    print("Creating tables (4) + commit : " + timer(start_time, start_time, create_end))
+    print("Creating tables  + commit : " + timer(start_time, start_time, create_end))
 
     with gzip.open("E:\School\ING\/1.Semeter\pdt database\/conversations.jsonl.gz", "r") as f:
         counter = 0
@@ -188,7 +206,7 @@ def conversations():
 
                 if data_line['entities'].get('urls'):
                     for url in data_line['entities']['urls']:
-                        input_link = [data_line['id'],url['expanded_url']]
+                        input_link = [data_line['id'],url['expanded_url'].replace('\x00','').replace('\\','').replace(';',',').replace('\n','').replace('\r', '')]
                         if url.get('title'):
                             input_link.append(url['title'].replace('\x00','').replace('\\','').replace(';',',').replace('\n','').replace('\r', ''))
                         else:
@@ -201,12 +219,37 @@ def conversations():
 
                         writer4.writerow(input_link)
 
+                if data_line['entities'].get('hashtags'):
+                    for has in data_line['entities'].get('hashtags'):
+                        input_has = [has['tag'].replace('\x00','').replace('\\','').replace(';',',').replace('\n','').replace('\r', '')]
+                        writer5.writerow(input_has)
+
+            if data_line.get('context_annotations'):
+                for x in data_line.get('context_annotations'):
+                    input_c_dom = [x['domain']['id'],x['domain']['name'].replace('\x00','').replace('\\','').replace(';',',').replace('\n','').replace('\r', '')]
+                    if x['domain'].get('description'):
+                        input_c_dom.append(x['domain']['description'].replace('\x00','').replace('\\','').replace(';',',').replace('\n','').replace('\r', ''))
+                    else:
+                        input_c_dom.append('')
+                    writer6.writerow(input_c_dom)
+
+                    input_c_ent = [x['entity']['id'],x['entity']['name'].replace('\x00','').replace('\\','').replace(';',',').replace('\n','').replace('\r', '')]
+                    if x['entity'].get('description'):
+                        input_c_ent.append(x['entity']['description'].replace('\x00','').replace('\\','').replace(';',',').replace('\n','').replace('\r', ''))
+                    else:
+                        input_c_ent.append('')
+                    writer7.writerow(input_c_ent)
+
+
             if counter == 100000:
                 # cleaning file
                 file1.close()
                 file2.close()
                 file3.close()
                 file4.close()
+                file5.close()
+                file6.close()
+                file7.close()
 
                 file1 = open("E:\School\ING\/1.Semeter\pdt database\/conversations.csv", "r", newline='', encoding='utf-8')
                 cursor.copy_from(file1, 'conversations', sep=';')
@@ -220,6 +263,15 @@ def conversations():
                 file4 = open("E:\School\ING\/1.Semeter\pdt database\/links.csv", "r", newline='',encoding='utf-8')
                 cursor.copy_from(file4, 'links', sep=';',columns=('conversation_id', 'url', 'title', 'description'))
 
+                file5 = open("E:\School\ING\/1.Semeter\pdt database\/hashtags.csv", "r", newline='', encoding='utf-8')
+                cursor.copy_from(file5, 'hashtags', sep=';', columns=(['tag']))
+
+                file6 = open("E:\School\ING\/1.Semeter\pdt database\/context_domains.csv", "r", newline='', encoding='utf-8')
+                cursor.copy_from(file6, 'context_domains', sep=';', columns=('id','name','description'))
+
+                file7 = open("E:\School\ING\/1.Semeter\pdt database\/context_entities.csv", "r", newline='',encoding='utf-8')
+                cursor.copy_from(file7, 'context_entities', sep=';', columns=('id', 'name', 'description'))
+
                 block_e = time.time()
                 print(timer(start_time, block_s, block_e))
                 counter = 0
@@ -231,10 +283,22 @@ def conversations():
                 file3 = open('E:\School\ING\/1.Semeter\pdt database\/annotations.csv', 'w', newline='',encoding='utf-8')
                 file4.close()
                 file4 = open('E:\School\ING\/1.Semeter\pdt database\/links.csv', 'w', newline='',encoding='utf-8')
+                file5.close()
+                file5 = open('E:\School\ING\/1.Semeter\pdt database\/hashtags.csv', 'w', newline='', encoding='utf-8')
+                file6.close()
+                file6 = open('E:\School\ING\/1.Semeter\pdt database\/context_domains.csv', 'w', newline='',encoding='utf-8')
+                file7.close()
+                file7 = open('E:\School\ING\/1.Semeter\pdt database\/context_entities.csv', 'w', newline='',encoding='utf-8')
+
                 writer = csv.writer(file1, delimiter=";")
                 writer2 = csv.writer(file2, delimiter=";")
                 writer3 = csv.writer(file3, delimiter=";")
                 writer4 = csv.writer(file4, delimiter=";")
+                writer5 = csv.writer(file5,delimiter=";")
+                writer6 = csv.writer(file6, delimiter=";")
+                writer7 = csv.writer(file7, delimiter=";")
+
+
                 conn.commit()
                 block_s = time.time()
                 break
