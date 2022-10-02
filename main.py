@@ -121,6 +121,8 @@ def conversations():
     writer2 = csv.writer(file2, delimiter=";")
     file3 = open("E:\School\ING\/1.Semeter\pdt database\/annotations.csv", "w", newline='',encoding='utf-8')
     writer3 = csv.writer(file3, delimiter=";")
+    file4 = open("E:\School\ING\/1.Semeter\pdt database\/links.csv", "w", newline='', encoding='utf-8')
+    writer4 = csv.writer(file4, delimiter=";")
 
     cursor.execute("""create table conversations (
     id int8,
@@ -144,10 +146,17 @@ def conversations():
     conversation_id int8,
     value text,
     type text,
-    probability NUMERIC(4,3))""")
+    probability NUMERIC(4,3));
+    CREATE table links (
+    id bigserial primary key,
+    conversation_id int8,
+    url varchar(2048),
+    title text,
+    description text)""")
+
     create_end = time.time()
     #conn.commit()
-    print("Creating table Conversations, Refs, Anotations + commit : " + timer(start_time, start_time, create_end))
+    print("Creating tables (4) + commit : " + timer(start_time, start_time, create_end))
 
     with gzip.open("E:\School\ING\/1.Semeter\pdt database\/conversations.jsonl.gz", "r") as f:
         counter = 0
@@ -177,12 +186,27 @@ def conversations():
                         input_annot = [data_line['id'],annot['normalized_text'].replace('\x00','').replace('\\','').replace(';',',').replace('\n','').replace('\r', ''),annot['type'],annot['probability']]
                         writer3.writerow(input_annot)
 
+                if data_line['entities'].get('urls'):
+                    for url in data_line['entities']['urls']:
+                        input_link = [data_line['id'],url['expanded_url']]
+                        if url.get('title'):
+                            input_link.append(url['title'].replace('\x00','').replace('\\','').replace(';',',').replace('\n','').replace('\r', ''))
+                        else:
+                            input_link.append('')
+
+                        if url.get('description'):
+                            input_link.append(url['description'].replace('\x00','').replace('\\','').replace(';',',').replace('\n','').replace('\r', ''))
+                        else:
+                            input_link.append('')
+
+                        writer4.writerow(input_link)
+
             if counter == 100000:
-                flag = 1
                 # cleaning file
                 file1.close()
                 file2.close()
                 file3.close()
+                file4.close()
 
                 file1 = open("E:\School\ING\/1.Semeter\pdt database\/conversations.csv", "r", newline='', encoding='utf-8')
                 cursor.copy_from(file1, 'conversations', sep=';')
@@ -193,6 +217,9 @@ def conversations():
                 file3 = open("E:\School\ING\/1.Semeter\pdt database\/annotations.csv", "r", newline='',encoding='utf-8')
                 cursor.copy_from(file3, 'annotations', sep=';',columns=('conversation_id','value', 'type', 'probability'))
 
+                file4 = open("E:\School\ING\/1.Semeter\pdt database\/links.csv", "r", newline='',encoding='utf-8')
+                cursor.copy_from(file4, 'links', sep=';',columns=('conversation_id', 'url', 'title', 'description'))
+
                 block_e = time.time()
                 print(timer(start_time, block_s, block_e))
                 counter = 0
@@ -202,12 +229,15 @@ def conversations():
                 file2 = open('E:\School\ING\/1.Semeter\pdt database\/conversations_references.csv', 'w', newline='', encoding='utf-8')
                 file3.close()
                 file3 = open('E:\School\ING\/1.Semeter\pdt database\/annotations.csv', 'w', newline='',encoding='utf-8')
+                file4.close()
+                file4 = open('E:\School\ING\/1.Semeter\pdt database\/links.csv', 'w', newline='',encoding='utf-8')
                 writer = csv.writer(file1, delimiter=";")
                 writer2 = csv.writer(file2, delimiter=";")
                 writer3 = csv.writer(file3, delimiter=";")
+                writer4 = csv.writer(file4, delimiter=";")
                 conn.commit()
                 block_s = time.time()
-
+                break
 
 
 conversations()
