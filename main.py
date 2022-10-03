@@ -106,30 +106,43 @@ def authors():
     conn.commit()
     block_e = time.time()
     print("Create constrains: " + timer(start_time, block_s, block_e))
-
-
+def open_files(method):
+    file1 = open("E:\School\ING\/1.Semeter\pdt database\/conversations.csv", method, newline='', encoding='utf-8')
+    file2 = open("E:\School\ING\/1.Semeter\pdt database\/conversations_references.csv", method, newline='',encoding='utf-8')
+    file3 = open("E:\School\ING\/1.Semeter\pdt database\/annotations.csv", method, newline='', encoding='utf-8')
+    file4 = open("E:\School\ING\/1.Semeter\pdt database\/links.csv", method, newline='', encoding='utf-8')
+    file5 = open("E:\School\ING\/1.Semeter\pdt database\/hashtags.csv", method, newline='', encoding='utf-8')
+    file6 = open("E:\School\ING\/1.Semeter\pdt database\/context_domains.csv", method, newline='', encoding='utf-8')
+    file7 = open("E:\School\ING\/1.Semeter\pdt database\/context_entities.csv", method, newline='', encoding='utf-8')
+    file8 = open("E:\School\ING\/1.Semeter\pdt database\/context_annotations.csv", method, newline='', encoding='utf-8')
+    return file1,file2,file3,file4,file5,file6,file7,file8
+def copy(file1, file2, file3, file4, file5, file6, file7, file8):
+    cursor.copy_from(file1, 'conversations', sep=';')
+    cursor.copy_from(file2, 'conversation_references', sep=';', columns=('conversation_id', 'parent_id', 'type'))
+    cursor.copy_from(file3, 'annotations', sep=';', columns=('conversation_id', 'value', 'type', 'probability'))
+    cursor.copy_from(file4, 'links', sep=';', columns=('conversation_id', 'url', 'title', 'description'))
+    cursor.copy_from(file5, 'hashtags', sep=';', columns=(['tag']))
+    cursor.copy_from(file6, 'context_domains', sep=';', columns=('id', 'name', 'description'))
+    cursor.copy_from(file7, 'context_entities', sep=';', columns=('id', 'name', 'description'))
+    cursor.copy_from(file8, 'context_annotations', sep=';', columns=('conversation_id', 'context_domain_id', 'context_entity_id'))
+def create_writers(file1, file2, file3, file4, file5, file6, file7, file8):
+    writer = csv.writer(file1, delimiter=";")
+    writer2 = csv.writer(file2, delimiter=";")
+    writer3 = csv.writer(file3, delimiter=";")
+    writer4 = csv.writer(file4, delimiter=";")
+    writer5 = csv.writer(file5, delimiter=";")
+    writer6 = csv.writer(file6, delimiter=";")
+    writer7 = csv.writer(file7, delimiter=";")
+    writer8 = csv.writer(file8, delimiter=";")
+    return writer,writer2,writer3,writer4,writer5,writer6,writer7,writer8
 def conversations():
     start_time = time.time()
     with gzip.open("E:\School\ING\/1.Semeter\pdt database\/conversations.jsonl.gz", "r") as f:
         counter = 0
     start_time = time.time()
-
     # creating temporary files
-    file1 = open("E:\School\ING\/1.Semeter\pdt database\/conversations.csv", "w", newline='', encoding='utf-8')
-    writer = csv.writer(file1, delimiter=";")
-    file2 = open("E:\School\ING\/1.Semeter\pdt database\/conversations_references.csv", "w", newline='', encoding='utf-8')
-    writer2 = csv.writer(file2, delimiter=";")
-    file3 = open("E:\School\ING\/1.Semeter\pdt database\/annotations.csv", "w", newline='',encoding='utf-8')
-    writer3 = csv.writer(file3, delimiter=";")
-    file4 = open("E:\School\ING\/1.Semeter\pdt database\/links.csv", "w", newline='', encoding='utf-8')
-    writer4 = csv.writer(file4, delimiter=";")
-    file5 = open("E:\School\ING\/1.Semeter\pdt database\/hashtags.csv", "w", newline='', encoding='utf-8')
-    writer5 = csv.writer(file5, delimiter=";")
-    file6 = open("E:\School\ING\/1.Semeter\pdt database\/context_domains.csv", "w", newline='', encoding='utf-8')
-    writer6 = csv.writer(file6, delimiter=";")
-    file7 = open("E:\School\ING\/1.Semeter\pdt database\/context_entities.csv", "w", newline='', encoding='utf-8')
-    writer7 = csv.writer(file7, delimiter=";")
-
+    file1, file2, file3, file4, file5, file6, file7, file8 = open_files('w')
+    writer, writer2, writer3, writer4, writer5, writer6, writer7, writer8 = create_writers(file1, file2, file3, file4, file5, file6, file7, file8)
 
     cursor.execute("""create table conversations (
     id int8,
@@ -170,7 +183,12 @@ def conversations():
     CREATE table context_entities (
     id int8,
     name VARCHAR(255),
-    description text)""")
+    description text);
+    CREATE table context_annotations (
+    id bigserial primary key,
+    conversation_id int8,
+    context_domain_id int8,
+    context_entity_id int8)""")
 
     create_end = time.time()
     #conn.commit()
@@ -226,6 +244,9 @@ def conversations():
 
             if data_line.get('context_annotations'):
                 for x in data_line.get('context_annotations'):
+                    input_c_ano = [data_line['conversation_id'],x['domain']['id'],x['entity']['id']]
+                    writer8.writerow(input_c_ano)
+
                     input_c_dom = [x['domain']['id'],x['domain']['name'].replace('\x00','').replace('\\','').replace(';',',').replace('\n','').replace('\r', '')]
                     if x['domain'].get('description'):
                         input_c_dom.append(x['domain']['description'].replace('\x00','').replace('\\','').replace(';',',').replace('\n','').replace('\r', ''))
@@ -243,65 +264,50 @@ def conversations():
 
             if counter == 100000:
                 # cleaning file
-                file1.close()
-                file2.close()
-                file3.close()
-                file4.close()
-                file5.close()
-                file6.close()
-                file7.close()
-
-                file1 = open("E:\School\ING\/1.Semeter\pdt database\/conversations.csv", "r", newline='', encoding='utf-8')
-                cursor.copy_from(file1, 'conversations', sep=';')
-
-                file2 = open("E:\School\ING\/1.Semeter\pdt database\/conversations_references.csv", "r", newline='',encoding='utf-8')
-                cursor.copy_from(file2,'conversation_references', sep=';', columns=('conversation_id','parent_id','type'))
-
-                file3 = open("E:\School\ING\/1.Semeter\pdt database\/annotations.csv", "r", newline='',encoding='utf-8')
-                cursor.copy_from(file3, 'annotations', sep=';',columns=('conversation_id','value', 'type', 'probability'))
-
-                file4 = open("E:\School\ING\/1.Semeter\pdt database\/links.csv", "r", newline='',encoding='utf-8')
-                cursor.copy_from(file4, 'links', sep=';',columns=('conversation_id', 'url', 'title', 'description'))
-
-                file5 = open("E:\School\ING\/1.Semeter\pdt database\/hashtags.csv", "r", newline='', encoding='utf-8')
-                cursor.copy_from(file5, 'hashtags', sep=';', columns=(['tag']))
-
-                file6 = open("E:\School\ING\/1.Semeter\pdt database\/context_domains.csv", "r", newline='', encoding='utf-8')
-                cursor.copy_from(file6, 'context_domains', sep=';', columns=('id','name','description'))
-
-                file7 = open("E:\School\ING\/1.Semeter\pdt database\/context_entities.csv", "r", newline='',encoding='utf-8')
-                cursor.copy_from(file7, 'context_entities', sep=';', columns=('id', 'name', 'description'))
+                file1.close(),file2.close(),file3.close(),file4.close(),file5.close(),file6.close(),file7.close(),file8.close()
+                file1, file2, file3, file4, file5, file6, file7, file8 = open_files('r')
+                copy(file1, file2, file3, file4, file5, file6, file7, file8)
 
                 block_e = time.time()
                 print(timer(start_time, block_s, block_e))
                 counter = 0
-                file1.close()
-                file1 = open('E:\School\ING\/1.Semeter\pdt database\/conversations.csv', 'w', newline='', encoding='utf-8')
-                file2.close()
-                file2 = open('E:\School\ING\/1.Semeter\pdt database\/conversations_references.csv', 'w', newline='', encoding='utf-8')
-                file3.close()
-                file3 = open('E:\School\ING\/1.Semeter\pdt database\/annotations.csv', 'w', newline='',encoding='utf-8')
-                file4.close()
-                file4 = open('E:\School\ING\/1.Semeter\pdt database\/links.csv', 'w', newline='',encoding='utf-8')
-                file5.close()
-                file5 = open('E:\School\ING\/1.Semeter\pdt database\/hashtags.csv', 'w', newline='', encoding='utf-8')
-                file6.close()
-                file6 = open('E:\School\ING\/1.Semeter\pdt database\/context_domains.csv', 'w', newline='',encoding='utf-8')
-                file7.close()
-                file7 = open('E:\School\ING\/1.Semeter\pdt database\/context_entities.csv', 'w', newline='',encoding='utf-8')
-
-                writer = csv.writer(file1, delimiter=";")
-                writer2 = csv.writer(file2, delimiter=";")
-                writer3 = csv.writer(file3, delimiter=";")
-                writer4 = csv.writer(file4, delimiter=";")
-                writer5 = csv.writer(file5,delimiter=";")
-                writer6 = csv.writer(file6, delimiter=";")
-                writer7 = csv.writer(file7, delimiter=";")
-
-
+                file1.close(), file2.close(), file3.close(), file4.close(), file5.close(), file6.close(), file7.close(), file8.close()
+                file1, file2, file3, file4, file5, file6, file7, file8 = open_files('w')
                 conn.commit()
                 block_s = time.time()
                 break
+
+        file1.close(), file2.close(), file3.close(), file4.close(), file5.close(), file6.close(), file7.close(), file8.close()
+        file1, file2, file3, file4, file5, file6, file7, file8 = open_files('r')
+        copy(file1, file2, file3, file4, file5, file6, file7, file8)
+
+    cursor.execute("""DELETE from contect_domains a USING 
+                            (SELECT MIN(ctid) as ctid, id
+                            FROM contect_domains
+                            GROUP BY id HAVING COUNT(*)>1)
+                            b WHERE a.id = b.id
+                            AND a.ctid <> b.ctid""")
+    cursor.execute("""DELETE from contect_entities a USING 
+                                (SELECT MIN(ctid) as ctid, id
+                                FROM contect_entities
+                                GROUP BY id HAVING COUNT(*)>1)
+                                b WHERE a.id = b.id
+                                AND a.ctid <> b.ctid""")
+    cursor.execute("""DELETE from hashtags a USING 
+                                    (SELECT MIN(ctid) as ctid, tag
+                                    FROM hashtags
+                                    GROUP BY id HAVING COUNT(*)>1)
+                                    b WHERE a.tag = b.tag
+                                    AND a.ctid <> b.ctid""")
+
+
+
+
+
+
+
+
+
 
 
 conversations()
