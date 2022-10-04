@@ -94,14 +94,7 @@ def authors():
     block_s = block_e
     #create constraints
     keys = """ALTER TABLE authors
-        ADD PRIMARY KEY (id),
-        ALTER COLUMN name SET NOT NULL,
-        ALTER COLUMN username SET NOT NULL,
-        ALTER COLUMN description SET NOT NULL,
-        ALTER COLUMN following_count SET NOT NULL,
-        ALTER COLUMN followers_count SET NOT NULL,
-        ALTER COLUMN tweet_count SET NOT NULL,
-        ALTER COLUMN listed_count SET NOT NULL;"""
+            ADD PRIMARY KEY (id)"""
     cursor.execute(keys)
     conn.commit()
     block_e = time.time()
@@ -135,6 +128,67 @@ def create_writers(file1, file2, file3, file4, file5, file6, file7, file8):
     writer7 = csv.writer(file7, delimiter=";")
     writer8 = csv.writer(file8, delimiter=";")
     return writer,writer2,writer3,writer4,writer5,writer6,writer7,writer8
+def deduplicate_con():
+    cursor.execute(
+        """DELETE from conversations a USING 
+           (SELECT MIN(ctid) as ctid, id
+           FROM conversations
+           GROUP BY id HAVING COUNT(*)>1)
+           b WHERE a.id = b.id
+           AND a.ctid <> b.ctid;
+           DELETE from context_domains a USING 
+           (SELECT MIN(ctid) as ctid, id
+           FROM context_domains
+           GROUP BY id HAVING COUNT(*)>1)
+           b WHERE a.id = b.id
+           AND a.ctid <> b.ctid;
+           DELETE from context_entities a USING 
+           (SELECT MIN(ctid) as ctid, id
+           FROM context_entities
+           GROUP BY id HAVING COUNT(*)>1)
+           b WHERE a.id = b.id
+           AND a.ctid <> b.ctid;
+           DELETE from hashtags a USING 
+           (SELECT MIN(ctid) as ctid, tag
+           FROM hashtags
+           GROUP BY id HAVING COUNT(*)>1)
+           b WHERE a.tag = b.tag
+           AND a.ctid <> b.ctid    
+        """
+    )
+
+def altertables():
+    cursor.execute("""
+    ALTER table conversations
+    ADD PRIMARY KEY (id),
+    ALTER column author_id SET NOT NULL,
+    ALTER column content SET NOT NULL,
+    ALTER column possibly_sensitive SET NOT NULL,
+    ALTER column language SET NOT NULL,
+    ALTER column source SET NOT NULL,
+    ALTER column created_at SET NOT NULL;    
+    
+    ALTER table contex_domains
+    ALTER column name SET NOT NULL;
+    
+    ALTER table context_entities
+    ALTER column name SET NOT NULL;
+    
+    ALTER table annotations
+    ALTER column value SET NOT NULL,
+    ALTER column type SET NOT NULL,
+    ALTER column probability SET NOT NULL;
+    
+    ALTER table links
+    ALTER column url SET NOT NULL;
+    
+    ALTER table conversation_references
+    ALTER column type SET NOT NULL;
+    
+    ALTER table hashtags
+    ADD UNIQUE (tag)
+    """
+    )
 def conversations():
     start_time = time.time()
     with gzip.open("E:\School\ING\/1.Semeter\pdt database\/conversations.jsonl.gz", "r") as f:
@@ -224,7 +278,10 @@ def conversations():
 
                 if data_line['entities'].get('urls'):
                     for url in data_line['entities']['urls']:
-                        input_link = [data_line['id'],url['expanded_url'].replace('\x00','').replace('\\','').replace(';',',').replace('\n','').replace('\r', '')]
+                        if len(url['expanded_url']) > 2048:
+                            input_link = [data_line['id'],url['expanded_url'].replace('\x00', '').replace('\\', '').replace(';',',').replace('\n', '').replace('\r', '')]
+                        else:
+                            input_link = [data_line['id'],'']
                         if url.get('title'):
                             input_link.append(url['title'].replace('\x00','').replace('\\','').replace(';',',').replace('\n','').replace('\r', ''))
                         else:
@@ -277,37 +334,43 @@ def conversations():
                 block_s = time.time()
                 break
 
+
         file1.close(), file2.close(), file3.close(), file4.close(), file5.close(), file6.close(), file7.close(), file8.close()
         file1, file2, file3, file4, file5, file6, file7, file8 = open_files('r')
         copy(file1, file2, file3, file4, file5, file6, file7, file8)
+        block_e = time.time()
+        print("Inserting last block of data and commit: " + timer(start_time, block_s, block_e))
 
-    cursor.execute("""DELETE from contect_domains a USING 
-                            (SELECT MIN(ctid) as ctid, id
-                            FROM contect_domains
-                            GROUP BY id HAVING COUNT(*)>1)
-                            b WHERE a.id = b.id
-                            AND a.ctid <> b.ctid""")
-    cursor.execute("""DELETE from contect_entities a USING 
-                                (SELECT MIN(ctid) as ctid, id
-                                FROM contect_entities
-                                GROUP BY id HAVING COUNT(*)>1)
-                                b WHERE a.id = b.id
-                                AND a.ctid <> b.ctid""")
-    cursor.execute("""DELETE from hashtags a USING 
-                                    (SELECT MIN(ctid) as ctid, tag
-                                    FROM hashtags
-                                    GROUP BY id HAVING COUNT(*)>1)
-                                    b WHERE a.tag = b.tag
-                                    AND a.ctid <> b.ctid""")
+    block_s = block_e
+    altertables()
+    block_e = time.time()
+    print("Altertables: " + timer(start_time, block_s, block_e))
+    block_s = block_e
+    deduplicate_con()
+    block_e = time.time()
+    print("Deduplicate: (+commit)" + timer(start_time, block_s, block_e))
+
+    block_s = block_e
+    #connection conversations and conversation references + constrains
+    cursor.execute("""DELETE from conversation_references cref where not exists (
+                    SELECT id from conversations conv where cref.parent_id = conv.id);
+                    ALTER TABLE conversation_references
+                    add foreign key (parent_id) REFERENCES conversations (id)""")
+
+    block_e = time.time()
+    print("Conection and clean conversations : (+commit)" + timer(start_time, block_s, block_e))
+
+    block_s = block_e
+    cursor.execute("""insert into authors (id)
+    select distinct author_id from conversations conv where conv.author_id not in (
+    select id from authors auth where auth.id = conv.author_id )
+    alter table conversations
+    add foreign key (author_id) REFERENCES authors (id)""")
+    block_e = time.time()
+    conn.commit()
+    print("Authors clean : (+commit)" + timer(start_time, block_s, block_e))
 
 
-
-
-
-
-
-
-
-
-
+#authors()
+print("conver\n")
 conversations()
