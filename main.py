@@ -74,6 +74,7 @@ def authors():
         file1.close()
         file1 = open("E:\School\ING\/1.Semeter\pdt database\/authors.csv", "r", newline='', encoding='utf-8')
         cursor.copy_from(file1, 'authors', sep=';')
+        file1.close()
         conn.commit()
         block_e = time.time()
         print("Inserting last block and commit: " + timer(start_time,block_s,block_e))
@@ -133,34 +134,45 @@ def create_writers(file1, file2, file3, file4, file5, file6, file7, file8,file9)
     return writer,writer2,writer3,writer4,writer5,writer6,writer7,writer8,writer9
 def deduplicate_con():
     cursor.execute(
-        """DELETE from conversations a USING 
-           (SELECT MIN(ctid) as ctid, id
-           FROM conversations
-           GROUP BY id HAVING COUNT(*)>1)
-           b WHERE a.id = b.id
-           AND a.ctid <> b.ctid;
-           DELETE from context_domains a USING 
-           (SELECT MIN(ctid) as ctid, id
-           FROM context_domains
-           GROUP BY id HAVING COUNT(*)>1)
-           b WHERE a.id = b.id
-           AND a.ctid <> b.ctid;
-           DELETE from context_entities a USING 
-           (SELECT MIN(ctid) as ctid, id
-           FROM context_entities
-           GROUP BY id HAVING COUNT(*)>1)
-           b WHERE a.id = b.id
-           AND a.ctid <> b.ctid;
-           DELETE from hashtags a USING 
-           (SELECT MIN(ctid) as ctid, tag
-           FROM hashtags
-           GROUP BY tag HAVING COUNT(*)>1)
-           b WHERE a.tag = b.tag
-           AND a.ctid <> b.ctid ;
-           ALTER table hashtags
-           ADD UNIQUE (tag)  
+    """DELETE from conversations a USING 
+       (SELECT MIN(ctid) as ctid, id
+       FROM conversations
+       GROUP BY id HAVING COUNT(*)>1)
+       b WHERE a.id = b.id
+       AND a.ctid <> b.ctid;""")
+    conn.commit()
+    print('done with conv dedup')
+    cursor.execute("""
+       DELETE from context_domains a USING 
+       (SELECT MIN(ctid) as ctid, id
+       FROM context_domains
+       GROUP BY id HAVING COUNT(*)>1)
+       b WHERE a.id = b.id
+       AND a.ctid <> b.ctid;""")
+    conn.commit()
+    print('done with domains dedup')
+    cursor.execute("""
+       DELETE from context_entities a USING 
+       (SELECT MIN(ctid) as ctid, id
+       FROM context_entities
+       GROUP BY id HAVING COUNT(*)>1)
+       b WHERE a.id = b.id
+       AND a.ctid <> b.ctid;""")
+    conn.commit()
+    print('done with entities dedup')
+    cursor.execute("""
+        DELETE from hashtags a USING 
+        (SELECT MIN(ctid) as ctid, tag
+        FROM hashtags
+        GROUP BY tag HAVING COUNT(*)>1)
+        b WHERE a.tag = b.tag
+        AND a.ctid <> b.ctid ;
+        ALTER table hashtags
+        ADD UNIQUE (tag)  
         """
     )
+    conn.commit()
+    print('done with hashtags dedup')
 
 def altertables():
     cursor.execute("""
@@ -174,9 +186,11 @@ def altertables():
     ALTER column created_at SET NOT NULL;    
     
     ALTER table context_domains
+    ADD PRIMARY KEY (id),
     ALTER column name SET NOT NULL;
     
     ALTER table context_entities
+    ADD PRIMARY KEY (id),
     ALTER column name SET NOT NULL;
     
     ALTER table annotations
@@ -190,16 +204,14 @@ def altertables():
     ALTER table conversation_references
     ALTER column type SET NOT NULL   
     
+    ALTERA TALBE context_annotations
+    ADD FOREIGN KEY (conversation_id) REFERENCES conversations(id),
+    ADD FOREIGN KEY (context_domain_id) REFERENCES context_domains(id),
+    ADD FOREIGN KEY (context_entity_id) REFERENCES context_entities(id)
     """
     )
 def conversations():
     start_time = time.time()
-    with gzip.open("E:\School\ING\/1.Semeter\pdt database\/conversations.jsonl.gz", "r") as f:
-        counter = 0
-    start_time = time.time()
-    file1, file2, file3, file4, file5, file6, file7, file8, file9 = open_files('w')
-    writer, writer2, writer3, writer4, writer5, writer6, writer7, writer8, writer9 = create_writers(file1, file2, file3, file4, file5, file6, file7, file8,file9)
-
     cursor.execute("""create table conversations (
     id int8,
     author_id int8,
@@ -252,23 +264,28 @@ def conversations():
     tag text)""")
     # creating temporary files
     file1, file2, file3, file4, file5, file6, file7, file8,file9 = open_files('w')
+    writer, writer2, writer3, writer4, writer5, writer6, writer7, writer8, writer9 = create_writers(file1, file2, file3,file4, file5, file6,file7, file8, file9)
 
     create_end = time.time()
     #conn.commit()
     print("Creating tables  + commit : " + timer(start_time, start_time, create_end))
 
     with gzip.open("E:\School\ING\/1.Semeter\pdt database\/conversations.jsonl.gz", "r") as f:
-        counter = 0
         block_s = time.time()
         counter = 0
         for line in f:
             data_line = json.loads(line)
             counter += 1
+            if '\x00' in data_line['text']:
+                data_line['text'] = data_line['text'].replace('\x00','')
+            if '\x00' in data_line['source']:
+                data_line['source'] = data_line['source'].replace('\x00', '')
+
             input = [data_line['id'],data_line['author_id'],
-                    data_line['text'].replace('\x00','').replace('\\','').replace(';',',').replace('\n','').replace('\r', ''),
+                    data_line['text'].replace('\\','').replace(';',',').replace('\n','').replace('\r', ''),
                     data_line['possibly_sensitive'],
                     data_line['lang'].replace('\x00','').replace('\\','').replace(';',',').replace('\n','').replace('\r', ''),
-                    data_line['source'].replace('\x00','').replace('\\','').replace(';',',').replace('\n','').replace('\r', ''),
+                    data_line['source'].replace('\\','').replace(';',',').replace('\n','').replace('\r', ''),
                     data_line['public_metrics']['retweet_count'],data_line['public_metrics']['reply_count'],
                     data_line['public_metrics']['like_count'],data_line['public_metrics']['quote_count'],
                     data_line['created_at']]
@@ -334,7 +351,7 @@ def conversations():
                 # cleaning file
                 file1.close(),file2.close(),file3.close(),file4.close(),file5.close(),file6.close(),file7.close(),file8.close(),file9.close()
                 file1, file2, file3, file4, file5, file6, file7, file8,file9 = open_files('r')
-                copy(file1, file2, file3, file4, file5, file6, file7, file8,file9)
+                copy(file1, file2, file3, file4, file5, file6, file7, file8, file9)
 
                 block_e = time.time()
                 print(timer(start_time, block_s, block_e))
@@ -343,25 +360,26 @@ def conversations():
                 file1, file2, file3, file4, file5, file6, file7, file8, file9 = open_files('w')
                 conn.commit()
                 block_s = time.time()
+                writer, writer2, writer3, writer4, writer5, writer6, writer7, writer8, writer9 = create_writers(file1,file2,file3,file4,file5,file6,file7,file8,file9)
                 counter = 0
 
 
         file1.close(), file2.close(), file3.close(), file4.close(), file5.close(), file6.close(), file7.close(), file8.close(), file9.close()
         file1, file2, file3, file4, file5, file6, file7, file8, file9 = open_files('r')
         copy(file1, file2, file3, file4, file5, file6, file7, file8, file9)
-        writer, writer2, writer3, writer4, writer5, writer6, writer7, writer8, writer9 = create_writers(file1, file2, file3, file4, file5, file6, file7, file8, file9)
+
         block_e = time.time()
-        print("Inserting last block of data and commit: " + timer(start_time, block_s, block_e))
+        print("Inserting last block of data and commit: \n" + timer(start_time, block_s, block_e))
 
     block_s = block_e
     deduplicate_con()
-
     block_e = time.time()
-    print("Deduplicate: (+commit)" + timer(start_time, block_s, block_e))
+    print("Deduplicate: (+commit):\n" + timer(start_time, block_s, block_e))
     block_s = block_e
     altertables()
+    conn.commit()
     block_e = time.time()
-    print("Altertables: " + timer(start_time, block_s, block_e))
+    print("Altertables: \n" + timer(start_time, block_s, block_e))
     block_s = block_e
     #connection conversations and conversation references + constrains
     cursor.execute("""DELETE from conversation_references cref where not exists (
@@ -370,7 +388,8 @@ def conversations():
                     add foreign key (parent_id) REFERENCES conversations (id)""")
 
     block_e = time.time()
-    print("Conection and clean conversations : (+commit)" + timer(start_time, block_s, block_e))
+    conn.commit()
+    print("Conection and clean conversations : (+commit)\n" + timer(start_time, block_s, block_e))
 
     block_s = block_e
     cursor.execute("""insert into authors (id)
@@ -380,11 +399,16 @@ def conversations():
     add foreign key (author_id) REFERENCES authors (id)""")
     block_e = time.time()
     conn.commit()
-    print("Authors clean : (+commit)" + timer(start_time, block_s, block_e))
-    block_s = block_e
+    print("Authors clean : (+commit)\n" + timer(start_time, block_s, block_e))
+    block_s = time.time()
     cursor.execute("""
     alter table hashtags
-    add primary key(id);
+    add primary key(id);""")
+    conn.commit()
+    block_e = time.time()
+    print('Primary key added'+ timer(start_time, block_s, block_e))
+    block_s = time.time()
+    cursor.execute("""
     update conversation_hashtags
     set hashtag_id = hashtags.id
     from hashtags
@@ -397,8 +421,8 @@ def conversations():
     drop column tag""")
     block_e = time.time()
     conn.commit()
-    print("Conversation : (+commit)" + timer(start_time, block_s, block_e))
+    print("Conversation hashtags : (+commit)\n" + timer(start_time, block_s, block_e))
 
-authors()
-print("\n")
+#authors()
+#print("\n")
 conversations()
